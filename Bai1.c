@@ -56,7 +56,9 @@ void *save_time(void *args)
   if(tmp.tv_sec != tpx->tv_sec | tmp.tv_nsec != tpx->tv_nsec)
   {
     FILE *file;
+    FILE *file2;
     file = fopen("time_and_interval.txt","a+");    long diff_sec = ((long) tpx->tv_sec) - tmp.tv_sec ;
+    file2 =fopen("interval.dat","a+");
     long diff_nsec;
 
     if(tpx->tv_nsec > tmp.tv_nsec)
@@ -68,8 +70,11 @@ void *save_time(void *args)
         diff_nsec = tmp.tv_nsec - tpx->tv_nsec;
         diff_sec = diff_sec - 1;
       }
-    fprintf(file,"\n%ld.%09ld \n%ld.%09ld",tpx->tv_sec,tpx->tv_nsec,diff_sec,diff_nsec);  
+    fprintf(file,"\n%ld.%09ld\n%ld.%09ld",tpx->tv_sec,tpx->tv_nsec,diff_sec,diff_nsec);  
+    fprintf(file2,"\n%ld.%09ld",diff_sec,diff_nsec);  
+   
     fclose(file);
+    fclose(file2);
     tmp.tv_sec = tpx->tv_sec;
     tmp.tv_nsec = tpx->tv_nsec;
     return NULL;
