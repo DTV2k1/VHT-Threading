@@ -3,120 +3,127 @@
 #include"pthread.h"
 #include"time.h"
 #include"string.h"
+#include"stdbool.h"
 #include"stdlib.h"
 #include "unistd.h"
 struct timespec tp;
-struct timespec tmp;
-
-long freq;
-long check_freq;
-struct timespec time1, time2;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;   
- long get_freq()
-{
-  long data;
-  FILE *fp;
-  fp = fopen("freq.txt","r");
-  char buff[100];
-  fgets(buff,sizeof(buff),fp);
-  char *eptr;
-  data = strtol(buff,&eptr,10);
-  fclose(fp);
-  return data;
- }
- void *getTime(void *args )
-{   
-    long x = *((long*)args);
-    clock_gettime(CLOCK_REALTIME,&tp);  
-    return NULL;
-}
+struct timespec tmp,request1;
+uint8_t check_loop = 1;
+long freq = 1000000;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;  
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;   
 void *getFreq(void *args)
 {
+  while(1)
+  {
+
   pthread_mutex_lock(&mutex);
-  long new_freq = get_freq();
+  FILE *fp;
+  fp = fopen("freq.txt","r");
+   unsigned long new_freq = 0;
+  fscanf(fp,"%lu",&new_freq);
+  fclose(fp); 
   if(new_freq == freq)
-  {  
-    pthread_mutex_unlock(&mutex);
-    return NULL;
+  {  pthread_mutex_unlock(&mutex);
   }
     else
-    {
+  {
     freq = new_freq;
-    time1.tv_sec = 0;
-      time1.tv_nsec = freq;
-    } 
-      pthread_mutex_unlock(&mutex);
-      return NULL;
+    pthread_mutex_unlock(&mutex);
+  } 
+  }
 
 }
+ void *getTime(void *args )
+{   
+      clock_gettime(CLOCK_REALTIME,&request1);  
+  while(check_loop == 1) 
+  {      
+      clock_gettime(CLOCK_REALTIME,&tp);  
+      long temp;
+        if(request1.tv_nsec + freq > 1000000000)
+        {
+          temp = request1.tv_nsec;
+          request1.tv_nsec =0;
+          request1.tv_sec +=1;
+            if(clock_nanosleep(CLOCK_REALTIME,TIMER_ABSTIME, &request1,NULL) != 0)
+              {
+                  check_loop = 0;
+              }
+              else
+              {
+                request1.tv_nsec+=temp-1000000000+ freq;
+                 if(clock_nanosleep(CLOCK_REALTIME,TIMER_ABSTIME, &request1,NULL) != 0)
+                  {
+                      check_loop = 0;
+                  }
+                  else
+                  {
+                      check_loop = 1;
+                  }
+              }
+        }
+        else{
+            request1.tv_nsec +=freq;
+            if(clock_nanosleep(CLOCK_REALTIME,TIMER_ABSTIME, &request1,NULL) != 0)
+              {
+                  check_loop = 0;
+              }
+            else
+              {
+                  check_loop = 1;
+              }
+        }
+        
+  }
+
+}
+
 void *save_time(void *args)
 {
-  struct timespec *tpx = (struct timespec *)args;
   //save time
-  if(tmp.tv_sec != tpx->tv_sec | tmp.tv_nsec != tpx->tv_nsec)
+  while(1)
   {
     FILE *file;
-    FILE *file2;
-    file = fopen("time_and_interval.txt","a+");    long diff_sec = ((long) tpx->tv_sec) - tmp.tv_sec ;
-    file2 =fopen("interval.dat","a+");
+    file = fopen("freq_1000000.txt","a+");
+    long diff_sec = ((long) tp.tv_sec) - tmp.tv_sec ;
     long diff_nsec;
+    if(tmp.tv_nsec != tp.tv_nsec || tmp.tv_sec != tp.tv_sec)
+    {
+      if(tp.tv_nsec > tmp.tv_nsec)
+        {
+          diff_nsec = tp.tv_nsec - tmp.tv_nsec;
+        }
+      else 
+        {
+          diff_nsec = 1000000000 + tp.tv_nsec - tmp.tv_nsec ;
+          diff_sec = diff_sec - 1;
+        }
+       fprintf(file,"\n%ld.%09ld",diff_sec,diff_nsec);  
+       tmp.tv_nsec =tp.tv_nsec;
+       tmp.tv_sec = tp.tv_sec;
 
-    if(tpx->tv_nsec > tmp.tv_nsec)
-      {
-        diff_nsec = tpx->tv_nsec - tmp.tv_nsec;
-      }
-    else 
-      {
-        diff_nsec = tmp.tv_nsec - tpx->tv_nsec;
-        diff_sec = diff_sec - 1;
-      }
-    fprintf(file,"\n%ld.%09ld\n%ld.%09ld",tpx->tv_sec,tpx->tv_nsec,diff_sec,diff_nsec);  
-    fprintf(file2,"\n%ld.%09ld",diff_sec,diff_nsec);  
-   
+    } 
     fclose(file);
-    fclose(file2);
-    tmp.tv_sec = tpx->tv_sec;
-    tmp.tv_nsec = tpx->tv_nsec;
-    return NULL;
-  }
-  else
-  {
-    return NULL;
-  }
+  } 
 }
 
 int main(int argc, char const *argv[])
 {
-    FILE *fp;
-    freq = get_freq();
+    
         pthread_t SAMPLE;
         pthread_t INPUT;
         pthread_t LOGGING;
         int s,i,l;
-      time1.tv_sec = 0;
-      time1.tv_nsec = freq;
-
       tmp.tv_sec = 0;
       tmp.tv_nsec = 0;   
-       pthread_mutex_init(&mutex, NULL);      
-      while(1)
-        {
-
-        if(nanosleep(&time1 , &time2) < 0 )   
-	      {
-	        printf("Nano sleep system call failed \n");
-	        return -1;
-	      }
-    	else
-          	{ 
-	            i = pthread_create(&INPUT,NULL,getFreq,&check_freq);
-	            s = pthread_create(&SAMPLE, NULL, getTime,&freq);
-	            l = pthread_create(&LOGGING,NULL,save_time,&tp);
-	            pthread_join(INPUT,NULL);
-	            pthread_join(SAMPLE,NULL);
-	        	pthread_join(LOGGING,NULL);
-	        	pthread_mutex_destroy(&mutex);
-      		}
-        } 
-        return 0;
+    pthread_mutex_init(&mutex, NULL); 
+       i = pthread_create(&INPUT,NULL,getFreq,NULL);
+        s = pthread_create(&SAMPLE, NULL, getTime,NULL);
+       l = pthread_create(&LOGGING,NULL,save_time,NULL);      
+       pthread_join(INPUT,NULL);
+        pthread_join(SAMPLE,NULL);
+       pthread_join(LOGGING,NULL);
+           pthread_mutex_destroy(&mutex);
+    
 }
